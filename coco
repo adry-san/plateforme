@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bonjour Manger Coco</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #1a1a2e; color: white; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 30px 20px; }
+    h1 { font-size: 1.4rem; color: #e2b96f; margin-bottom: 6px; text-align: center; }
+    .back { color: #aaa; font-size: 0.85rem; margin-bottom: 24px; cursor: pointer; text-decoration: none; display: inline-block; }
+    .back:hover { color: white; }
+    input, select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #333; font-size: 1rem; margin-bottom: 10px; background: #16213e; color: white; }
+    button { width: 100%; padding: 14px; border-radius: 10px; border: none; font-size: 1rem; cursor: pointer; margin-bottom: 10px; font-weight: bold; transition: 0.2s; }
+    .btn-primary { background: #e2b96f; color: #1a1a2e; }
+    .btn-green { background: #4ecca3; color: #1a1a2e; }
+    .btn-red { background: #e94560; color: white; }
+    .btn-grey { background: #333; color: white; }
+    .section { width: 100%; max-width: 440px; }
+    .hidden { display: none; }
+    .card-question { background: #0f3460; border: 2px solid #4ecca3; border-radius: 14px; padding: 24px; text-align: center; font-size: 1.2rem; line-height: 1.6; margin-bottom: 20px; }
+    .card-question .blank { display: inline-block; border-bottom: 3px solid #4ecca3; min-width: 80px; }
+    .hand { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .card-answer { background: #16213e; border: 1px solid #444; border-radius: 10px; padding: 14px; cursor: pointer; transition: 0.2s; font-size: 0.95rem; }
+    .card-answer:hover { border-color: #e2b96f; }
+    .card-answer.selected { border-color: #4ecca3; background: #0f3460; }
+    .card-answer.disabled { opacity: 0.4; cursor: default; pointer-events: none; }
+    .submissions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .submission-card { background: #16213e; border: 1px solid #444; border-radius: 10px; padding: 14px; cursor: pointer; transition: 0.2s; }
+    .submission-card:hover { border-color: #e2b96f; }
+    .submission-card.winner { border-color: #4ecca3; background: #0f3460; }
+    .player-list { margin-bottom: 16px; }
+    .player-item { background: #16213e; border-radius: 8px; padding: 10px 14px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem; }
+    .badge { font-size: 0.75rem; padding: 3px 10px; border-radius: 20px; font-weight: bold; }
+    .badge-gold { background: #e2b96f; color: #1a1a2e; }
+    .badge-blue { background: #4ecca3; color: #1a1a2e; }
+    .badge-grey { background: #333; color: #aaa; }
+    .status-msg { text-align: center; color: #aaa; font-size: 0.95rem; margin-bottom: 16px; min-height: 24px; }
+    .score-board { width: 100%; margin-bottom: 16px; }
+    .room-code { background: #16213e; border-radius: 10px; padding: 16px; text-align: center; margin-bottom: 16px; }
+    .room-code span { font-size: 2rem; font-weight: bold; color: #e2b96f; letter-spacing: 6px; }
+    .waiting-count { color: #aaa; font-size: 0.9rem; margin-top: 6px; }
+  </style>
+</head>
+<body>
+
+<div class="section" id="screen-join">
+  <a href="index.html" class="back">← Accueil</a>
+  <h1>🃏 Bonjour Manger Coco</h1>
+  <p style="color:#aaa; font-size:0.85rem; margin-bottom:20px; text-align:center;">Jeu de cartes multijoueur</p>
+  <input type="text" id="input-player-name" placeholder="Ton prénom..." maxlength="20" />
+  <button class="btn-primary" id="btn-create">Créer une partie</button>
+  <div style="text-align:center; color:#aaa; margin: 8px 0; font-size:0.9rem;">— ou —</div>
+  <input type="text" id="input-room-code" placeholder="Code de la salle..." maxlength="6" style="text-transform:uppercase; letter-spacing:4px;" />
+  <button class="btn-grey" id="btn-join">Rejoindre</button>
+</div>
+
+<div class="section hidden" id="screen-settings">
+  <a href="index.html" class="back">← Accueil</a>
+  <h1>🃏 Paramètres</h1>
+  <p style="color:#aaa; font-size:0.85rem; margin-bottom:20px; text-align:center;">Configure la partie</p>
+  <label style="color:#aaa; font-size:0.85rem; margin-bottom:6px; display:block;">Points pour gagner</label>
+  <select id="select-points">
+    <option value="5">5 points</option>
+    <option value="7" selected>7 points</option>
+    <option value="10">10 points</option>
+    <option value="15">15 points</option>
+  </select>
+  <button class="btn-green" id="btn-confirm-settings">Créer la salle →</button>
+</div>
+
+<div class="section hidden" id="screen-lobby">
+  <a href="index.html" class="back">← Accueil</a>
+  <h1>🃏 Salle d'attente</h1>
+  <div class="room-code">
+    <div style="color:#aaa; font-size:0.8rem; margin-bottom:6px;">Code de la salle</div>
+    <span id="display-room-code">------</span>
+    <div class="waiting-count" id="waiting-count">En attente de joueurs...</div>
+  </div>
+  <div class="player-list" id="lobby-players"></div>
+  <div class="status-msg" id="lobby-status">Partage le code avec tes amis !</div>
+  <button class="btn-green hidden" id="btn-start-game">🚀 Lancer la partie</button>
+</div>
+
+<div class="section hidden" id="screen-game">
+  <h1>🃏 Bonjour Manger Coco</h1>
+  <div class="score-board" id="score-board"></div>
+  <div id="game-content"></div>
+</div>
+
+<div class="section hidden" id="screen-end">
+  <h1>🏆 Fin de partie !</h1>
+  <div id="end-content" style="text-align:center; margin: 30px 0;"></div>
+  <button class="btn-primary" onclick="location.href='index.html'">← Retour à l'accueil</button>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDlXhhS8Az04Z-55LHtJWqrVJt79LhSIAU",
+  authDomain: "plateforme-77efd.firebaseapp.com",
+  projectId: "plateforme-77efd",
+  storageBucket: "plateforme-77efd.firebasestorage.app",
+  messagingSenderId: "1061460763647",
+  appId: "1:1061460763647:web:8b4ac092a21406cc49bdca"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ——— DECK DE BASE ———
+const QUESTIONS = [
+  "Ce soir, on mange ___.",
+  "Le secret du bonheur, c'est ___.",
+  "Ma mère m'a dit que ___ c'est important.",
+  "J'ai trouvé ___ dans le frigo.",
+  "Le médecin a dit que j'avais besoin de ___.",
+  "Pour les vacances, j'emporte toujours ___.",
+  "Mon super-pouvoir secret, c'est ___.",
+  "___ : voilà ce qui me manque le plus.",
+  "La dernière chose que j'ai googleée : ___.",
+  "Mon plan B dans la vie, c'est ___.",
+  "Ce qui me réveille la nuit : ___.",
+  "À mon enterrement, je veux qu'on joue ___.",
+  "J'ai honte de ___, mais je recommencerais.",
+  "Mon seul talent caché : ___.",
+  "Si j'étais président, j'interdirais ___.",
+  "La prochaine invention dont le monde a besoin : ___.",
+  "Mon pire souvenir d'école : ___.",
+  "Ce que je ferais avec un million d'euros : ___.",
+  "Mon animal de compagnie idéal : ___.",
+  "La phrase que je répète trop souvent : ___.",
+  "___ m'a complètement changé la vie.",
+  "Sur ma tombe, il sera écrit : ___."
+];
+
+const ANSWERS = [
+  "des nouilles froides", "mon ex", "une bouteille de ketchup vide",
+  "pleurer sous la douche", "faire semblant de téléphoner",
+  "un cheval en colère", "trois cafés d'affilée", "regarder le plafond",
+  "mon chat mort", "une réunion Zoom en pyjama", "ignorer mes notifications",
+  "manger debout au-dessus de l'évier", "un certificat médical douteux",
+  "danser seul dans ma cuisine", "appeler ma mère",
+  "un documentaire sur les pieuvres", "du pain rassis",
+  "faire comme si tout allait bien", "une sieste de 4 heures",
+  "des chips au vinaigre", "mentir à mon dentiste",
+  "regarder les gens tomber sur YouTube", "un euro et des regrets",
+  "oublier pourquoi je suis entré dans cette pièce",
+  "une profonde méditation de 10 secondes", "du fromage à 3h du matin",
+  "prétendre ne pas avoir vu le message", "ma collection de stylos qui marchent pas",
+  "un câlin forcé", "faire du sport demain", "une liste de tâches jamais faite",
+  "acheter un truc inutile en ligne", "boire de l'eau tiède",
+  "une chanson de karaoké trop ambitieuse", "passer l'aspirateur à minuit",
+  "ma fierté", "une pizza entière seul", "pleurer devant une pub",
+  "insulter les personnages d'une série", "un abonnement que j'oublie d'annuler",
+  "faire mine de comprendre", "un biscuit tombé par terre (règle des 5 secondes)",
+  "googler mes symptômes à 2h du mat", "ma couverture préférée",
+  "un sourire forcé très convaincant", "de la mayonnaise industrielle",
+  "me lever du mauvais pied", "un texto envoyé par erreur",
+  "l'odeur des livres anciens", "un problème d'adulte que je comprends pas"
+];
+
+// ——— STATE ———
+let myName = '';
+let myId = '';
+let roomId = '';
+let unsubscribe = null;
+let myHand = [];
+let selectedCard = null;
+let gameState = null;
+
+// ——— UTILS ———
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function generateRoomCode() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+function generateId() {
+  return Math.random().toString(36).substring(2, 12);
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+
+// ——— JOIN / CREATE ———
+document.getElementById('btn-create').addEventListener('click', () => {
+  myName = document.getElementById('input-player-name').value.trim();
+  if (!myName) return alert("Entre ton prénom !");
+  showScreen('screen-settings');
+});
+
+document.getElementById('btn-confirm-settings').addEventListener('click', async () => {
+  const points = parseInt(document.getElementById('select-points').value);
+  roomId = generateRoomCode();
+  myId = generateId();
+
+  const shuffledQ = shuffle(QUESTIONS);
+  const shuffledA = shuffle(ANSWERS);
+
+  await db.collection('rooms').doc(roomId).set({
+    status: 'lobby',
+    pointsToWin: points,
+    players: { [myId]: { name: myName, score: 0, hand: shuffledA.splice(0, 7) } },
+    host: myId,
+    questionDeck: shuffledQ,
+    answerDeck: shuffledA,
+    currentQuestion: null,
+    submissions: {},
+    czar: myId,
+    round: 0,
+    createdAt: new Date()
+  });
+
+  document.getElementById('display-room-code').textContent = roomId;
+  showScreen('screen-lobby');
+  listenRoom();
+});
+
+document.getElementById('btn-join').addEventListener('click', async () => {
+  myName = document.getElementById('input-player-name').value.trim();
+  const code = document.getElementById('input-room-code').value.trim().toUpperCase();
+  if (!myName) return alert("Entre ton prénom !");
+  if (!code) return alert("Entre un code de salle !");
+
+  const doc = await db.collection('rooms').doc(code).get();
+  if (!doc.exists) return alert("Salle introuvable !");
+  const data = doc.data();
+  if (data.status !== 'lobby') return alert("La partie a déjà commencé !");
+
+  roomId = code;
+  myId = generateId();
+
+  const answerDeck = [...data.answerDeck];
+  const myCards = answerDeck.splice(0, 7);
+
+  await db.collection('rooms').doc(roomId).update({
+    [`players.${myId}`]: { name: myName, score: 0, hand: myCards },
+    answerDeck: answerDeck
+  });
+
+  document.getElementById('display-room-code').textContent = roomId;
+  showScreen('screen-lobby');
+  listenRoom();
+});
+
+// ——— LOBBY ———
+document.getElementById('btn-start-game').addEventListener('click', async () => {
+  const doc = await db.collection('rooms').doc(roomId).get();
+  const data = doc.data();
+  const playerIds = Object.keys(data.players);
+  if (playerIds.length < 2) return alert("Il faut au moins 2 joueurs !");
+
+  const questionDeck = [...data.questionDeck];
+  const firstQuestion = questionDeck.shift();
+
+  await db.collection('rooms').doc(roomId).update({
+    status: 'playing',
+    currentQuestion: firstQuestion,
+    questionDeck: questionDeck,
+    czar: data.host,
+    submissions: {},
+    round: 1
+  });
+});
+
+// ——— LISTENER PRINCIPAL ———
+function listenRoom() {
+  if (unsubscribe) unsubscribe();
+  unsubscribe = db.collection('rooms').doc(roomId).onSnapshot(doc => {
+    if (!doc.exists) return;
+    gameState = doc.data();
+    myHand = gameState.players[myId]?.hand || [];
+
+    if (gameState.status === 'lobby') renderLobby(gameState);
+    else if (gameState.status === 'playing') renderGame(gameState);
+    else if (gameState.status === 'round_result') renderRoundResult(gameState);
+    else if (gameState.status === 'ended') renderEnd(gameState);
+  });
+}
+
+// ——— RENDER LOBBY ———
+function renderLobby(state) {
+  showScreen('screen-lobby');
+  const players = state.players;
+  const ids = Object.keys(players);
+  const container = document.getElementById('lobby-players');
+  container.innerHTML = '';
+  ids.forEach(id => {
+    const div = document.createElement('div');
+    div.className = 'player-item';
+    div.innerHTML = `<span>${players[id].name}</span>
+      <span class="badge ${id === state.host ? 'badge-gold' : 'badge-grey'}">
+        ${id === state.host ? 'Hôte' : 'Joueur'}
+      </span>`;
+    container.appendChild(div);
+  });
+  document.getElementById('waiting-count').textContent = `${ids.length} joueur(s) connecté(s)`;
+
+  const btnStart = document.getElementById('btn-start-game');
+  if (myId === state.host) {
+    btnStart.classList.remove('hidden');
+    btnStart.textContent = ids.length >= 2 ? '🚀 Lancer la partie' : '⏳ En attente de joueurs...';
+  }
+}
+
+// ——— RENDER SCOREBOARD ———
+function renderScoreboard(state) {
+  const players = state.players;
+  const sorted = Object.entries(players).sort((a, b) => b[1].score - a[1].score);
+  document.getElementById('score-board').innerHTML = `
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; justify-content:center;">
+      ${sorted.map(([id, p]) => `
+        <div style="background:#16213e; border-radius:8px; padding:8px 14px; text-align:center; border:1px solid ${id === state.czar ? '#e2b96f' : '#333'}">
+          <div style="font-size:0.8rem; color:#aaa;">${p.name}${id === state.czar ? ' 👑' : ''}</div>
+          <div style="font-size:1.2rem; font-weight:bold; color:#4ecca3;">${p.score} pts</div>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ——— RENDER GAME ———
+function renderGame(state) {
+  showScreen('screen-game');
+  renderScoreboard(state);
+  const isCzar = myId === state.czar;
+  const czarName = state.players[state.czar]?.name;
+  const submissions = state.submissions || {};
+  const playerIds = Object.keys(state.players).filter(id => id !== state.czar);
+  const submittedCount = Object.keys(submissions).length;
+  const allSubmitted = submittedCount >= playerIds.length;
+
+  const questionHtml = `<div class="card-question">${state.currentQuestion.replace('___', '<span class="blank">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')}</div>`;
+
+  if (isCzar) {
+    if (!allSubmitted) {
+      document.getElementById('game-content').innerHTML = `
+        ${questionHtml}
+        <div class="status-msg">Tu es le maître du jeu 👑<br>En attente des réponses... (${submittedCount}/${playerIds.length})</div>`;
+    } else {
+      const cards = Object.entries(submissions);
+      document.getElementById('game-content').innerHTML = `
+        ${questionHtml}
+        <div class="status-msg">Choisis la meilleure réponse !</div>
+        <div class="submissions">
+          ${cards.map(([pid, card]) => `
+            <div class="submission-card" onclick="czarPick('${pid}')">
+              ${card}
+            </div>`).join('')}
+        </div>`;
+    }
+  } else {
+    const alreadySubmitted = submissions[myId] !== undefined;
+    if (alreadySubmitted) {
+      document.getElementById('game-content').innerHTML = `
+        ${questionHtml}
+        <div class="status-msg">Carte envoyée ✅<br>${czarName} choisit la meilleure... (${submittedCount}/${playerIds.length})</div>`;
+    } else {
+      document.getElementById('game-content').innerHTML = `
+        ${questionHtml}
+        <div class="status-msg">Choisis une carte à jouer</div>
+        <div class="hand" id="hand-cards">
+          ${myHand.map((card, i) => `
+            <div class="card-answer" onclick="selectCard(${i})" id="card-${i}">
+              ${card}
+            </div>`).join('')}
+        </div>
+        <button class="btn-green" id="btn-submit" onclick="submitCard()" style="display:none">Jouer cette carte ✓</button>`;
+    }
+  }
+}
+
+// ——— SELECT CARD ———
+window.selectCard = (i) => {
+  selectedCard = i;
+  document.querySelectorAll('.card-answer').forEach(c => c.classList.remove('selected'));
+  document.getElementById(`card-${i}`)?.classList.add('selected');
+  document.getElementById('btn-submit').style.display = 'block';
+};
+
+// ——— SUBMIT CARD ———
+window.submitCard = async () => {
+  if (selectedCard === null) return;
+  const card = myHand[selectedCard];
+  await db.collection('rooms').doc(roomId).update({
+    [`submissions.${myId}`]: card
+  });
+  selectedCard = null;
+};
+
+// ——— CZAR PICKS ———
+window.czarPick = async (winnerId) => {
+  const state = gameState;
+  const winner = state.players[winnerId];
+  const newScore = (winner.score || 0) + 1;
+  const pointsToWin = state.pointsToWin;
+
+  // Donne une nouvelle carte au gagnant
+  const answerDeck = [...state.answerDeck];
+  const newCard = answerDeck.shift() || ANSWERS[Math.floor(Math.random() * ANSWERS.length)];
+  const newHand = state.players[winnerId].hand.filter(c => c !== state.submissions[winnerId]);
+  newHand.push(newCard);
+
+  // Donne une nouvelle carte à tous les autres joueurs non-czar
+  const updates = {
+    status: 'round_result',
+    roundWinner: winnerId,
+    answerDeck: answerDeck,
+    [`players.${winnerId}.score`]: newScore,
+    [`players.${winnerId}.hand`]: newHand
+  };
+
+  // Renouvelle les cartes de tous les joueurs sauf le czar
+  for (const pid of Object.keys(state.players)) {
+    if (pid !== state.czar && pid !== winnerId) {
+      const deck = updates.answerDeck || answerDeck;
+      const nc = deck.shift() || ANSWERS[Math.floor(Math.random() * ANSWERS.length)];
+      const nh = state.players[pid].hand.filter(c => c !== state.submissions[pid]);
+      nh.push(nc);
+      updates[`players.${pid}.hand`] = nh;
+    }
+  }
+
+  if (newScore >= pointsToWin) {
+    updates.status = 'ended';
+    updates.finalWinner = winnerId;
+  }
+
+  await db.collection('rooms').doc(roomId).update(updates);
+};
+
+// ——— RENDER ROUND RESULT ———
+function renderRoundResult(state) {
+  showScreen('screen-game');
+  renderScoreboard(state);
+  const winner = state.players[state.roundWinner];
+  const winningCard = state.submissions[state.roundWinner];
+  const isNextCzar = myId === state.roundWinner;
+
+  document.getElementById('game-content').innerHTML = `
+    <div class="card-question">${state.currentQuestion.replace('___', '<span class="blank">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>')}</div>
+    <div style="text-align:center; margin-bottom:16px;">
+      <div style="font-size:1rem; color:#aaa; margin-bottom:8px;">Meilleure réponse :</div>
+      <div class="submission-card winner" style="cursor:default;">${winningCard}</div>
+      <div style="margin-top:12px; color:#e2b96f; font-weight:bold;">🏆 ${winner.name} gagne cette manche !</div>
+    </div>
+    ${isNextCzar
+      ? `<button class="btn-green" onclick="nextRound()">Manche suivante →</button>`
+      : `<div class="status-msg">${winner.name} prépare la prochaine manche...</div>`}`;
+}
+
+// ——— NEXT ROUND ———
+window.nextRound = async () => {
+  const state = gameState;
+  const questionDeck = [...state.questionDeck];
+  if (questionDeck.length === 0) {
+    await db.collection('rooms').doc(roomId).update({ status: 'ended', finalWinner: state.roundWinner });
+    return;
+  }
+  const nextQuestion = questionDeck.shift();
+  await db.collection('rooms').doc(roomId).update({
+    status: 'playing',
+    currentQuestion: nextQuestion,
+    questionDeck: questionDeck,
+    czar: state.roundWinner,
+    submissions: {},
+    round: (state.round || 0) + 1
+  });
+};
+
+// ——— RENDER END ———
+function renderEnd(state) {
+  showScreen('screen-end');
+  const winner = state.players[state.finalWinner];
+  const players = Object.values(state.players).sort((a, b) => b.score - a.score);
+  document.getElementById('end-content').innerHTML = `
+    <div style="font-size:3rem; margin-bottom:12px;">🏆</div>
+    <div style="font-size:1.5rem; font-weight:bold; color:#e2b96f; margin-bottom:20px;">${winner.name} a gagné !</div>
+    <div style="background:#16213e; border-radius:12px; padding:16px; margin-bottom:20px;">
+      ${players.map((p, i) => `
+        <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #333; color:${i===0?'#e2b96f':'white'}">
+          <span>${i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'} ${p.name}</span>
+          <span>${p.score} pts</span>
+        </div>`).join('')}
+    </div>`;
+}
+</script>
+</body>
+</html>
