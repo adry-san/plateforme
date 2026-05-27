@@ -329,7 +329,29 @@ function shuffle(arr){const a=[...arr];for(let i=a.length-1;i>0;i--){const j=Mat
 function genCode(){return Math.random().toString(36).substring(2,8).toUpperCase();}
 function genId(){return Math.random().toString(36).substring(2,12);}
 function showScreen(id){document.querySelectorAll('.section').forEach(s=>s.classList.add('hidden'));document.getElementById(id).classList.remove('hidden');}
-function qHtml(q){return q.replace('___','<span class="blank">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>');}
+function qHtml(q, answer) {
+  if (answer) {
+    // Réponse insérée avec effet Tipp-Ex
+    const answerSpan = `<span style="
+      background: white;
+      color: #1a1a2e;
+      font-weight: bold;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 1rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+      display: inline-block;
+      margin: 0 2px;
+    ">${answer}</span>`;
+    return q.replace('___', answerSpan);
+  }
+  // Trou vide — tiret blanc souligné
+  return q.replace('___', '<span style="display:inline-block;border-bottom:3px solid #4ecca3;min-width:80px;margin:0 4px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>');
+}
+function normalizeMarker(text) {
+  // Remplace tout _ isolé ou groupe de _ par ___
+  return text.replace(/_+/g, '___');
+}
 
 // ═══════════════════════════════════════════════
 // SESSION
@@ -538,7 +560,7 @@ document.getElementById('btn-confirm-settings').addEventListener('click',async()
 
   saveSession();
   document.getElementById('display-room-code').textContent=roomId;
-  if(writingPhase){ showScreen('screen-writing'); renderWritingPhase(await db.collection('rooms').doc(roomId).get().then(d=>d.data())); }
+  if(writingPhase){ showScreen('screen-writing'); }
   else showScreen('screen-lobby');
   listenRoom();
 });
@@ -912,7 +934,7 @@ function renderRoundResult(state){
   // Révèle les auteurs
   const allCards=Object.entries(state.submissions||{});
   document.getElementById('game-content').innerHTML=`
-    <div class="card-question">${qHtml(state.currentQuestion)}</div>
+    <div class="card-question">${qHtml(state.currentQuestion, state.submissions[state.roundWinner])}</div>
     <div style="text-align:center;margin-bottom:12px;color:#e2b96f;font-weight:bold;">🏆 ${winner.name} gagne cette manche !</div>
     <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:20px;">
       ${allCards.map(([pid,card])=>`
@@ -1032,17 +1054,18 @@ function updateOverlayHint(){
 window.submitNewCard=async()=>{
   const text=document.getElementById('overlay-card-text').value.trim();
   if(!text) return alert("Écris quelque chose !");
-  if(currentCardType==='question'&&!text.includes('___')) return alert("La question doit contenir ___ !");
+  const normalized = normalizeMarker(text);
+  if(currentCardType==='question' && !normalized.includes('___'))
+  return alert("La question doit contenir _ pour marquer le trou !");
 
   const field=currentCardType==='question'?'questions':'answers';
   const ref=db.collection('dynamic_decks').doc(currentOverlayDeckId);
   const doc=await ref.get();
   const current=doc.data()?.[field]||[];
-  await ref.update({[field]:[...current,text]});
-
-  // Met à jour le cache local
+  const cardText = currentCardType==='question' ? normalizeMarker(text) : text;
+  await ref.update({[field]:[...current, cardText]});
   if(dynamicDecks[currentOverlayDeckId]){
-    dynamicDecks[currentOverlayDeckId][field]=[...current,text];
+  dynamicDecks[currentOverlayDeckId][field]=[...current, cardText];
   }
 
   closeOverlay();
