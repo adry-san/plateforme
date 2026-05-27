@@ -26,7 +26,6 @@
     .card-answer { background: #16213e; border: 1px solid #444; border-radius: 10px; padding: 14px; cursor: pointer; transition: 0.2s; font-size: 0.95rem; }
     .card-answer:hover { border-color: #e2b96f; }
     .card-answer.selected { border-color: #4ecca3; background: #0f3460; }
-    .card-answer.disabled { opacity: 0.4; cursor: default; pointer-events: none; }
     .submissions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
     .submission-card { background: #16213e; border: 1px solid #444; border-radius: 10px; padding: 14px; cursor: pointer; transition: 0.2s; }
     .submission-card:hover { border-color: #e2b96f; }
@@ -35,17 +34,24 @@
     .player-item { background: #16213e; border-radius: 8px; padding: 10px 14px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem; }
     .badge { font-size: 0.75rem; padding: 3px 10px; border-radius: 20px; font-weight: bold; }
     .badge-gold { background: #e2b96f; color: #1a1a2e; }
-    .badge-blue { background: #4ecca3; color: #1a1a2e; }
     .badge-grey { background: #333; color: #aaa; }
     .status-msg { text-align: center; color: #aaa; font-size: 0.95rem; margin-bottom: 16px; min-height: 24px; }
-    .score-board { width: 100%; margin-bottom: 16px; }
     .room-code { background: #16213e; border-radius: 10px; padding: 16px; text-align: center; margin-bottom: 16px; }
     .room-code span { font-size: 2rem; font-weight: bold; color: #e2b96f; letter-spacing: 6px; }
     .waiting-count { color: #aaa; font-size: 0.9rem; margin-top: 6px; }
+    .deck-row { background: #16213e; border: 1px solid #333; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+    .deck-row .deck-title { font-weight: bold; color: #e2b96f; margin-bottom: 4px; font-size: 0.95rem; }
+    .deck-row .deck-desc { font-size: 0.8rem; color: #aaa; margin-bottom: 10px; }
+    .deck-row .counter { display: flex; align-items: center; gap: 12px; }
+    .deck-row .counter button { width: 36px; height: 36px; border-radius: 8px; font-size: 1.2rem; padding: 0; margin: 0; background: #0f3460; color: white; border: 1px solid #444; cursor: pointer; }
+    .deck-row .counter span { font-size: 1.2rem; font-weight: bold; min-width: 24px; text-align: center; color: #4ecca3; }
+    .deck-row .deck-info { font-size: 0.75rem; color: #666; margin-top: 6px; }
+    .section-label { font-size: 0.85rem; color: #aaa; margin-bottom: 8px; margin-top: 4px; }
   </style>
 </head>
 <body>
 
+<!-- ÉCRAN 1 : REJOINDRE / CRÉER -->
 <div class="section" id="screen-join">
   <a href="index.html" class="back">← Accueil</a>
   <h1>🃏 Bonjour Manger Coco</h1>
@@ -57,20 +63,27 @@
   <button class="btn-grey" id="btn-join">Rejoindre</button>
 </div>
 
+<!-- ÉCRAN 2 : PARAMÈTRES -->
 <div class="section hidden" id="screen-settings">
   <a href="index.html" class="back">← Accueil</a>
   <h1>🃏 Paramètres</h1>
-  <p style="color:#aaa; font-size:0.85rem; margin-bottom:20px; text-align:center;">Configure la partie</p>
-  <label style="color:#aaa; font-size:0.85rem; margin-bottom:6px; display:block;">Points pour gagner</label>
+
+  <p class="section-label">Points pour gagner</p>
   <select id="select-points">
     <option value="5">5 points</option>
     <option value="7" selected>7 points</option>
     <option value="10">10 points</option>
     <option value="15">15 points</option>
   </select>
+
+  <p class="section-label" style="margin-top:12px;">Choix des decks et proportions</p>
+  <div id="deck-selector"></div>
+
+  <div id="deck-preview" style="font-size:0.8rem; color:#4ecca3; text-align:center; margin-bottom:12px; min-height:20px;"></div>
   <button class="btn-green" id="btn-confirm-settings">Créer la salle →</button>
 </div>
 
+<!-- ÉCRAN 3 : LOBBY -->
 <div class="section hidden" id="screen-lobby">
   <a href="index.html" class="back">← Accueil</a>
   <h1>🃏 Salle d'attente</h1>
@@ -84,19 +97,22 @@
   <button class="btn-green hidden" id="btn-start-game">🚀 Lancer la partie</button>
 </div>
 
+<!-- ÉCRAN 4 : JEU -->
 <div class="section hidden" id="screen-game">
   <h1>🃏 Bonjour Manger Coco</h1>
   <div class="score-board" id="score-board"></div>
   <div id="game-content"></div>
 </div>
 
+<!-- ÉCRAN 5 : FIN -->
 <div class="section hidden" id="screen-end">
   <h1>🏆 Fin de partie !</h1>
   <div id="end-content" style="text-align:center; margin: 30px 0;"></div>
-  <button class="btn-primary" onclick="location.href='index.html'">← Retour à l'accueil</button>
+  <button class="btn-primary" onclick="clearSessionAndGoHome()">← Retour à l'accueil</button>
 </div>
 
 <script>
+// ─── FIREBASE ───────────────────────────────────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyDlXhhS8Az04Z-55LHtJWqrVJt79LhSIAU",
   authDomain: "plateforme-77efd.firebaseapp.com",
@@ -108,68 +124,112 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// ——— DECK DE BASE ———
-const QUESTIONS = [
-  "Ce soir, on mange ___.",
-  "Le secret du bonheur, c'est ___.",
-  "Ma mère m'a dit que ___ c'est important.",
-  "J'ai trouvé ___ dans le frigo.",
-  "Le médecin a dit que j'avais besoin de ___.",
-  "Pour les vacances, j'emporte toujours ___.",
-  "Mon super-pouvoir secret, c'est ___.",
-  "___ : voilà ce qui me manque le plus.",
-  "La dernière chose que j'ai googleée : ___.",
-  "Mon plan B dans la vie, c'est ___.",
-  "Ce qui me réveille la nuit : ___.",
-  "À mon enterrement, je veux qu'on joue ___.",
-  "J'ai honte de ___, mais je recommencerais.",
-  "Mon seul talent caché : ___.",
-  "Si j'étais président, j'interdirais ___.",
-  "La prochaine invention dont le monde a besoin : ___.",
-  "Mon pire souvenir d'école : ___.",
-  "Ce que je ferais avec un million d'euros : ___.",
-  "Mon animal de compagnie idéal : ___.",
-  "La phrase que je répète trop souvent : ___.",
-  "___ m'a complètement changé la vie.",
-  "Sur ma tombe, il sera écrit : ___."
-];
+// ─── DECKS ──────────────────────────────────────────────────
+const DECKS = {
+  trash: {
+    name: "🗑️ Trash",
+    description: "Humour noir, gras et sans filtre",
+    questions: [
+      "Ce soir, on mange ___.",
+      "J'ai trouvé ___ dans le frigo.",
+      "Le médecin a dit que j'avais besoin de ___.",
+      "Mon pire souvenir d'école : ___.",
+      "À mon enterrement, je veux ___.",
+      "J'ai honte de ___, mais je recommencerais.",
+      "Sur ma tombe, il sera écrit : ___.",
+      "Ce qui me réveille la nuit : ___.",
+      "La dernière chose que j'ai googleée : ___.",
+      "Mon plan B dans la vie, c'est ___.",
+      "Si j'étais président, j'interdirais ___.",
+      "Ce que je ferais avec un million d'euros : ___.",
+      "La phrase que je répète trop souvent : ___.",
+      "___ m'a complètement changé la vie.",
+      "Mon seul talent caché : ___.",
+      "La prochaine invention dont le monde a besoin : ___.",
+      "Mon animal de compagnie idéal : ___.",
+      "Ce que je ferais si j'avais 24h à vivre : ___.",
+      "Le truc dont personne ne parle mais tout le monde fait : ___.",
+      "Ma technique secrète pour séduire : ___."
+    ],
+    answers: [
+      "des nouilles froides", "mon ex", "une bouteille de ketchup vide",
+      "pleurer sous la douche", "faire semblant de téléphoner",
+      "un cheval en colère", "trois cafés d'affilée", "regarder le plafond",
+      "mon chat mort", "une réunion Zoom en pyjama", "ignorer mes notifications",
+      "manger debout au-dessus de l'évier", "un certificat médical douteux",
+      "danser seul dans ma cuisine", "appeler ma mère",
+      "un documentaire sur les pieuvres", "du pain rassis",
+      "faire comme si tout allait bien", "une sieste de 4 heures",
+      "des chips au vinaigre", "mentir à mon dentiste",
+      "regarder les gens tomber sur YouTube", "un euro et des regrets",
+      "oublier pourquoi je suis entré dans cette pièce",
+      "une profonde méditation de 10 secondes", "du fromage à 3h du matin",
+      "prétendre ne pas avoir vu le message", "ma collection de stylos qui marchent pas",
+      "un câlin forcé", "faire du sport demain", "une liste de tâches jamais faite",
+      "acheter un truc inutile en ligne", "boire de l'eau tiède",
+      "une chanson de karaoké trop ambitieuse", "passer l'aspirateur à minuit",
+      "ma fierté", "une pizza entière seul", "pleurer devant une pub",
+      "insulter les personnages d'une série", "un abonnement que j'oublie d'annuler",
+      "faire mine de comprendre", "un biscuit tombé par terre (règle des 5 secondes)",
+      "googler mes symptômes à 2h du mat", "ma couverture préférée",
+      "un sourire forcé très convaincant", "de la mayonnaise industrielle",
+      "me lever du mauvais pied", "un texto envoyé par erreur",
+      "l'odeur des livres anciens", "un problème d'adulte que je comprends pas"
+    ]
+  },
+  absurde: {
+    name: "🌀 Absurde",
+    description: "Situations improbables et logique de travers",
+    questions: [
+      "Les scientifiques ont découvert que ___ cause le bonheur.",
+      "Le nouveau sport olympique : ___.",
+      "En 2087, les humains seront remplacés par ___.",
+      "Le gouvernement a interdit ___ sans explication.",
+      "Mon application préférée : ___ mais pour ___.",
+      "La recette secrète de grand-mère contenait ___.",
+      "Le superhéros dont le monde a besoin : ___.",
+      "Ce que les extraterrestres pensent de la Terre : ___.",
+      "L'invention qui a tout gâché : ___.",
+      "Le nouveau moyen de transport écologique : ___.",
+      "La vraie raison pour laquelle les dinosaures ont disparu : ___.",
+      "Le thème de mon mariage : ___.",
+      "Ce que cache réellement la Joconde : ___.",
+      "La solution au réchauffement climatique selon moi : ___.",
+      "Ce qu'on trouve au centre de la Terre : ___.",
+      "Le prochain livre best-seller : ___ pour les nuls.",
+      "Le secret de l'immortalité : ___.",
+      "Ce que pensent vraiment les pigeons : ___.",
+      "La vraie signification de la vie : ___.",
+      "Mon plan pour dominer le monde : ___."
+    ],
+    answers: [
+      "un canard en plastique sentient", "manger de la colle en réunion",
+      "une imprimante qui marche du premier coup", "le wifi des voisins",
+      "un chien qui parle mais dit que des bêtises", "42 baguettes de pain",
+      "une pieuvre philosophe", "des chaussettes humides",
+      "l'odeur de l'essence", "un tournoi de Pierre-Feuille-Ciseaux international",
+      "une licorne fonctionnaire", "le silence dans les open spaces",
+      "trois escargots et une mission", "une baguette magique en mode économie",
+      "le bouton d'ascenseur pour fermer les portes (qui ne sert à rien)",
+      "une réunion qui aurait pu être un email",
+      "un chat qui fixe le mur à 3h du mat", "de la confiture sur une pizza",
+      "un robot qui procrastine", "l'esprit de l'escalier",
+      "une grenouille avec un MBA", "du papier bulle infini",
+      "un GPS qui insulte poliment", "une machine à remonter le temps bloquée en 2007",
+      "un sosie de Napoléon en rollers", "une araignée chef cuisinier",
+      "le son d'un didgeridoo à l'aube", "un contrat avec le diable pour du wifi 5G",
+      "une prophétie écrite sur un ticket de caisse", "l'ombre d'un nuage pensif",
+      "un hamster stratège", "la magie de l'imprimante en panne",
+      "une vache cosmonaute", "le dernier biscuit dans la boîte",
+      "un volcan végétarien", "la théorie du complot des pigeons",
+      "un dauphin avocat", "une alarme incendie pendant un rêve",
+      "le plan secret des chats pour dominer internet",
+      "une cuillère à soupe de mystère"
+    ]
+  }
+};
 
-const ANSWERS = [
-  "des nouilles froides", "mon ex", "une bouteille de ketchup vide",
-  "pleurer sous la douche", "faire semblant de téléphoner",
-  "un cheval en colère", "trois cafés d'affilée", "regarder le plafond",
-  "mon chat mort", "une réunion Zoom en pyjama", "ignorer mes notifications",
-  "manger debout au-dessus de l'évier", "un certificat médical douteux",
-  "danser seul dans ma cuisine", "appeler ma mère",
-  "un documentaire sur les pieuvres", "du pain rassis",
-  "faire comme si tout allait bien", "une sieste de 4 heures",
-  "des chips au vinaigre", "mentir à mon dentiste",
-  "regarder les gens tomber sur YouTube", "un euro et des regrets",
-  "oublier pourquoi je suis entré dans cette pièce",
-  "une profonde méditation de 10 secondes", "du fromage à 3h du matin",
-  "prétendre ne pas avoir vu le message", "ma collection de stylos qui marchent pas",
-  "un câlin forcé", "faire du sport demain", "une liste de tâches jamais faite",
-  "acheter un truc inutile en ligne", "boire de l'eau tiède",
-  "une chanson de karaoké trop ambitieuse", "passer l'aspirateur à minuit",
-  "ma fierté", "une pizza entière seul", "pleurer devant une pub",
-  "insulter les personnages d'une série", "un abonnement que j'oublie d'annuler",
-  "faire mine de comprendre", "un biscuit tombé par terre (règle des 5 secondes)",
-  "googler mes symptômes à 2h du mat", "ma couverture préférée",
-  "un sourire forcé très convaincant", "de la mayonnaise industrielle",
-  "me lever du mauvais pied", "un texto envoyé par erreur",
-  "l'odeur des livres anciens", "un problème d'adulte que je comprends pas"
-];
-
-// ——— STATE ———
-let myName = '';
-let myId = '';
-let roomId = '';
-let unsubscribe = null;
-let myHand = [];
-let selectedCard = null;
-let gameState = null;
-
-// ——— UTILS ———
+// ─── UTILS ──────────────────────────────────────────────────
 function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -192,7 +252,159 @@ function showScreen(id) {
   document.getElementById(id).classList.remove('hidden');
 }
 
-// ——— JOIN / CREATE ———
+// ─── ALGORITHME DE MÉLANGE PAR PROPORTIONS ──────────────────
+// Calcule le deck final en respectant les proportions
+// séparément pour questions et réponses
+function buildDeckFromProportions(deckCoefficients) {
+  // deckCoefficients = { trash: 10, absurde: 4, ... }
+  const activeDecks = Object.entries(deckCoefficients).filter(([, v]) => v > 0);
+  if (activeDecks.length === 0) return { questions: [], answers: [] };
+
+  const totalCoeff = activeDecks.reduce((sum, [, v]) => sum + v, 0);
+
+  // Calcule le facteur multiplicateur maximal pour questions
+  let maxFactorQ = Infinity;
+  for (const [key, coeff] of activeDecks) {
+    const available = DECKS[key].questions.length;
+    const factor = available / coeff;
+    if (factor < maxFactorQ) maxFactorQ = factor;
+  }
+
+  // Calcule le facteur multiplicateur maximal pour réponses
+  let maxFactorA = Infinity;
+  for (const [key, coeff] of activeDecks) {
+    const available = DECKS[key].answers.length;
+    const factor = available / coeff;
+    if (factor < maxFactorA) maxFactorA = factor;
+  }
+
+  // Construit les decks finaux
+  const finalQuestions = [];
+  const finalAnswers = [];
+
+  for (const [key, coeff] of activeDecks) {
+    const qCount = Math.floor(coeff * maxFactorQ);
+    const aCount = Math.floor(coeff * maxFactorA);
+    const shuffledQ = shuffle(DECKS[key].questions).slice(0, qCount);
+    const shuffledA = shuffle(DECKS[key].answers).slice(0, aCount);
+    finalQuestions.push(...shuffledQ);
+    finalAnswers.push(...shuffledA);
+  }
+
+  return {
+    questions: shuffle(finalQuestions),
+    answers: shuffle(finalAnswers)
+  };
+}
+
+function computePreview(coefficients) {
+  const active = Object.entries(coefficients).filter(([, v]) => v > 0);
+  if (active.length === 0) return "Sélectionne au moins un deck";
+  const totalCoeff = active.reduce((sum, [, v]) => sum + v, 0);
+
+  let maxFactorQ = Infinity;
+  let maxFactorA = Infinity;
+  for (const [key, coeff] of active) {
+    maxFactorQ = Math.min(maxFactorQ, DECKS[key].questions.length / coeff);
+    maxFactorA = Math.min(maxFactorA, DECKS[key].answers.length / coeff);
+  }
+
+  const totalQ = active.reduce((sum, [, coeff]) => sum + Math.floor(coeff * maxFactorQ), 0);
+  const totalA = active.reduce((sum, [, coeff]) => sum + Math.floor(coeff * maxFactorA), 0);
+  return `→ ${totalQ} cartes questions · ${totalA} cartes réponses`;
+}
+
+// ─── STATE ──────────────────────────────────────────────────
+let myName = '';
+let myId = '';
+let roomId = '';
+let unsubscribe = null;
+let myHand = [];
+let selectedCard = null;
+let gameState = null;
+let deckCoefficients = {};
+
+// ─── SESSION PERSISTANTE (localStorage) ─────────────────────
+function saveSession() {
+  localStorage.setItem('coco_session', JSON.stringify({ myId, myName, roomId }));
+}
+
+function loadSession() {
+  try {
+    const s = localStorage.getItem('coco_session');
+    return s ? JSON.parse(s) : null;
+  } catch { return null; }
+}
+
+function clearSession() {
+  localStorage.removeItem('coco_session');
+}
+
+window.clearSessionAndGoHome = () => {
+  clearSession();
+  location.href = 'index.html';
+};
+
+// ─── INIT : vérifie si session existante ────────────────────
+async function init() {
+  const session = loadSession();
+  if (session && session.roomId && session.myId) {
+    const doc = await db.collection('rooms').doc(session.roomId).get();
+    if (doc.exists) {
+      const data = doc.data();
+      // Vérifie que le joueur est bien dans cette salle et que la partie n'est pas finie
+      if (data.players && data.players[session.myId] && data.status !== 'ended') {
+        myId = session.myId;
+        myName = session.myName;
+        roomId = session.roomId;
+        document.getElementById('display-room-code').textContent = roomId;
+        listenRoom();
+        return;
+      }
+    }
+    // Session invalide, on nettoie
+    clearSession();
+  }
+  // Pas de session : affiche l'écran de connexion
+  showScreen('screen-join');
+  renderDeckSelector();
+}
+
+// ─── DECK SELECTOR ──────────────────────────────────────────
+function renderDeckSelector() {
+  Object.keys(DECKS).forEach(key => { deckCoefficients[key] = 0; });
+
+  const container = document.getElementById('deck-selector');
+  container.innerHTML = '';
+  Object.entries(DECKS).forEach(([key, deck]) => {
+    const div = document.createElement('div');
+    div.className = 'deck-row';
+    div.innerHTML = `
+      <div class="deck-title">${deck.name}</div>
+      <div class="deck-desc">${deck.description}</div>
+      <div class="counter">
+        <button onclick="changeCoeff('${key}', -1)">−</button>
+        <span id="coeff-${key}">0</span>
+        <button onclick="changeCoeff('${key}', 1)">+</button>
+      </div>
+      <div class="deck-info">${deck.questions.length} questions · ${deck.answers.length} réponses</div>
+    `;
+    container.appendChild(div);
+  });
+  updatePreview();
+}
+
+window.changeCoeff = (key, delta) => {
+  deckCoefficients[key] = Math.max(0, (deckCoefficients[key] || 0) + delta);
+  document.getElementById(`coeff-${key}`).textContent = deckCoefficients[key];
+  updatePreview();
+};
+
+function updatePreview() {
+  document.getElementById('deck-preview').textContent = computePreview(deckCoefficients);
+}
+
+// ─── CRÉER UNE PARTIE ───────────────────────────────────────
 document.getElementById('btn-create').addEventListener('click', () => {
   myName = document.getElementById('input-player-name').value.trim();
   if (!myName) return alert("Entre ton prénom !");
@@ -200,20 +412,27 @@ document.getElementById('btn-create').addEventListener('click', () => {
 });
 
 document.getElementById('btn-confirm-settings').addEventListener('click', async () => {
+  const active = Object.values(deckCoefficients).some(v => v > 0);
+  if (!active) return alert("Sélectionne au moins un deck !");
+
   const points = parseInt(document.getElementById('select-points').value);
+  const { questions, answers } = buildDeckFromProportions(deckCoefficients);
+
+  if (questions.length < 5) return alert("Pas assez de cartes questions ! Augmente les coefficients.");
+  if (answers.length < 14) return alert("Pas assez de cartes réponses ! Augmente les coefficients.");
+
   roomId = generateRoomCode();
   myId = generateId();
 
-  const shuffledQ = shuffle(QUESTIONS);
-  const shuffledA = shuffle(ANSWERS);
+  const myCards = answers.splice(0, 7);
 
   await db.collection('rooms').doc(roomId).set({
     status: 'lobby',
     pointsToWin: points,
-    players: { [myId]: { name: myName, score: 0, hand: shuffledA.splice(0, 7) } },
+    players: { [myId]: { name: myName, score: 0, hand: myCards } },
     host: myId,
-    questionDeck: shuffledQ,
-    answerDeck: shuffledA,
+    questionDeck: questions,
+    answerDeck: answers,
     currentQuestion: null,
     submissions: {},
     czar: myId,
@@ -221,11 +440,13 @@ document.getElementById('btn-confirm-settings').addEventListener('click', async 
     createdAt: new Date()
   });
 
+  saveSession();
   document.getElementById('display-room-code').textContent = roomId;
   showScreen('screen-lobby');
   listenRoom();
 });
 
+// ─── REJOINDRE ───────────────────────────────────────────────
 document.getElementById('btn-join').addEventListener('click', async () => {
   myName = document.getElementById('input-player-name').value.trim();
   const code = document.getElementById('input-room-code').value.trim().toUpperCase();
@@ -248,12 +469,13 @@ document.getElementById('btn-join').addEventListener('click', async () => {
     answerDeck: answerDeck
   });
 
+  saveSession();
   document.getElementById('display-room-code').textContent = roomId;
   showScreen('screen-lobby');
   listenRoom();
 });
 
-// ——— LOBBY ———
+// ─── LANCER LA PARTIE ────────────────────────────────────────
 document.getElementById('btn-start-game').addEventListener('click', async () => {
   const doc = await db.collection('rooms').doc(roomId).get();
   const data = doc.data();
@@ -273,7 +495,7 @@ document.getElementById('btn-start-game').addEventListener('click', async () => 
   });
 });
 
-// ——— LISTENER PRINCIPAL ———
+// ─── LISTENER PRINCIPAL ──────────────────────────────────────
 function listenRoom() {
   if (unsubscribe) unsubscribe();
   unsubscribe = db.collection('rooms').doc(roomId).onSnapshot(doc => {
@@ -288,7 +510,7 @@ function listenRoom() {
   });
 }
 
-// ——— RENDER LOBBY ———
+// ─── LOBBY ───────────────────────────────────────────────────
 function renderLobby(state) {
   showScreen('screen-lobby');
   const players = state.players;
@@ -313,7 +535,7 @@ function renderLobby(state) {
   }
 }
 
-// ——— RENDER SCOREBOARD ———
+// ─── SCOREBOARD ──────────────────────────────────────────────
 function renderScoreboard(state) {
   const players = state.players;
   const sorted = Object.entries(players).sort((a, b) => b[1].score - a[1].score);
@@ -327,7 +549,7 @@ function renderScoreboard(state) {
     </div>`;
 }
 
-// ——— RENDER GAME ———
+// ─── JEU ─────────────────────────────────────────────────────
 function renderGame(state) {
   showScreen('screen-game');
   renderScoreboard(state);
@@ -362,7 +584,7 @@ function renderGame(state) {
     if (alreadySubmitted) {
       document.getElementById('game-content').innerHTML = `
         ${questionHtml}
-        <div class="status-msg">Carte envoyée ✅<br>${czarName} choisit la meilleure... (${submittedCount}/${playerIds.length})</div>`;
+        <div class="status-msg">Carte envoyée ✅<br>${czarName} choisit... (${submittedCount}/${playerIds.length})</div>`;
     } else {
       document.getElementById('game-content').innerHTML = `
         ${questionHtml}
@@ -378,7 +600,6 @@ function renderGame(state) {
   }
 }
 
-// ——— SELECT CARD ———
 window.selectCard = (i) => {
   selectedCard = i;
   document.querySelectorAll('.card-answer').forEach(c => c.classList.remove('selected'));
@@ -386,7 +607,6 @@ window.selectCard = (i) => {
   document.getElementById('btn-submit').style.display = 'block';
 };
 
-// ——— SUBMIT CARD ———
 window.submitCard = async () => {
   if (selectedCard === null) return;
   const card = myHand[selectedCard];
@@ -396,48 +616,38 @@ window.submitCard = async () => {
   selectedCard = null;
 };
 
-// ——— CZAR PICKS ———
 window.czarPick = async (winnerId) => {
   const state = gameState;
   const winner = state.players[winnerId];
   const newScore = (winner.score || 0) + 1;
-  const pointsToWin = state.pointsToWin;
 
-  // Donne une nouvelle carte au gagnant
   const answerDeck = [...state.answerDeck];
-  const newCard = answerDeck.shift() || ANSWERS[Math.floor(Math.random() * ANSWERS.length)];
-  const newHand = state.players[winnerId].hand.filter(c => c !== state.submissions[winnerId]);
-  newHand.push(newCard);
 
-  // Donne une nouvelle carte à tous les autres joueurs non-czar
   const updates = {
-    status: 'round_result',
+    status: newScore >= state.pointsToWin ? 'ended' : 'round_result',
     roundWinner: winnerId,
     answerDeck: answerDeck,
-    [`players.${winnerId}.score`]: newScore,
-    [`players.${winnerId}.hand`]: newHand
+    [`players.${winnerId}.score`]: newScore
   };
 
-  // Renouvelle les cartes de tous les joueurs sauf le czar
+  if (newScore >= state.pointsToWin) updates.finalWinner = winnerId;
+
+  // Renouvelle la carte de chaque joueur non-czar
   for (const pid of Object.keys(state.players)) {
-    if (pid !== state.czar && pid !== winnerId) {
-      const deck = updates.answerDeck || answerDeck;
-      const nc = deck.shift() || ANSWERS[Math.floor(Math.random() * ANSWERS.length)];
-      const nh = state.players[pid].hand.filter(c => c !== state.submissions[pid]);
-      nh.push(nc);
-      updates[`players.${pid}.hand`] = nh;
+    if (pid !== state.czar) {
+      const playedCard = state.submissions[pid];
+      const newCard = answerDeck.shift() || shuffle(state.answerDeck)[0];
+      const newHand = state.players[pid].hand.filter(c => c !== playedCard);
+      newHand.push(newCard);
+      updates[`players.${pid}.hand`] = newHand;
     }
   }
-
-  if (newScore >= pointsToWin) {
-    updates.status = 'ended';
-    updates.finalWinner = winnerId;
-  }
+  updates.answerDeck = answerDeck;
 
   await db.collection('rooms').doc(roomId).update(updates);
 };
 
-// ——— RENDER ROUND RESULT ———
+// ─── RÉSULTAT DE MANCHE ──────────────────────────────────────
 function renderRoundResult(state) {
   showScreen('screen-game');
   renderScoreboard(state);
@@ -457,7 +667,6 @@ function renderRoundResult(state) {
       : `<div class="status-msg">${winner.name} prépare la prochaine manche...</div>`}`;
 }
 
-// ——— NEXT ROUND ———
 window.nextRound = async () => {
   const state = gameState;
   const questionDeck = [...state.questionDeck];
@@ -476,8 +685,9 @@ window.nextRound = async () => {
   });
 };
 
-// ——— RENDER END ———
+// ─── FIN DE PARTIE ───────────────────────────────────────────
 function renderEnd(state) {
+  clearSession();
   showScreen('screen-end');
   const winner = state.players[state.finalWinner];
   const players = Object.values(state.players).sort((a, b) => b.score - a.score);
@@ -487,11 +697,14 @@ function renderEnd(state) {
     <div style="background:#16213e; border-radius:12px; padding:16px; margin-bottom:20px;">
       ${players.map((p, i) => `
         <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #333; color:${i===0?'#e2b96f':'white'}">
-          <span>${i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'} ${p.name}</span>
+          <span>${i===0?'🥇':i===1?'🥈':'🥉'} ${p.name}</span>
           <span>${p.score} pts</span>
         </div>`).join('')}
     </div>`;
 }
+
+// ─── DÉMARRAGE ───────────────────────────────────────────────
+init();
 </script>
 </body>
 </html>
